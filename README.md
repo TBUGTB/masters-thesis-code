@@ -7,12 +7,12 @@ This repository contains the code of my master's thesis project on Syntactic Sim
 2. Install Lean4 along with the Lean4 VSCode extension following [these instructions](https://leanprover.github.io/lean4/doc/quickstart.html).  If `#eval Lean.versionString` gives you a Lean version in VSCode, that’s working correctly.  If not, type `elan show` in a terminal to check if Lean4 has been installed at all.
 3. `git clone` this repository.
 4. Open the folder of this repository and run the following commands:
-```
-lake update
-curl -L https://raw.githubusercontent.com/leanprover-community/mathlib4/master/lean-toolchain -o lean-toolchain
-lake exe cache get
-```
-This will download Mathlib4 including its cache files which you will then find in the folder `lake-packages`.
+	```
+	lake update
+	curl -L https://raw.githubusercontent.com/leanprover-community/mathlib4/master/lean-toolchain -o lean-toolchain
+	lake exe cache get
+	```
+	This will download Mathlib4 including its cache files which you will then find in the folder `lake-packages`.
 5. Restart the Lean server: `VSCode > Command-Shift-P > Lean 4: Restart`.
 6. Test that your install of Mathlib has worked. For example, you could create a file like this: 
 	```
