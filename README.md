@@ -13,8 +13,8 @@ curl -L https://raw.githubusercontent.com/leanprover-community/mathlib4/master/l
 lake exe cache get
 ```
 This will download Mathlib4 including its cache files which you will then find in the folder `lake-packages`.
-6. Restart the Lean server: `VSCode > Command-Shift-P > Lean 4: Restart`.
-7. Test that your install of Mathlib has worked. For example, you could create a file like this: 
+5. Restart the Lean server: `VSCode > Command-Shift-P > Lean 4: Restart`.
+6. Test that your install of Mathlib has worked. For example, you could create a file like this: 
 	```
 	import Mathlib.Data.Vector.Basic
 	
