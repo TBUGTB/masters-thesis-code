@@ -27,3 +27,15 @@ lean_lib ReferenceImplementation {
 lean_lib Search {
   -- add any library configuration options here
 }
+
+lean_lib ComputationCache {
+  -- add any library configuration options here
+}
+
+lean_lib IncompleteMatchings {
+  -- add any library configuration options here
+}
+
+lean_lib SyntacticSimilarity {
+  -- add any library configuration options here
+}

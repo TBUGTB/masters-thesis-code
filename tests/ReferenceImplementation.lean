@@ -1,20 +1,34 @@
-import ReferenceImplementation
+import SyntacticSimilarity
 
-open HoleTree SyntacticSimilarity
+open HoleTree Tree SyntacticSimilarity
 
 def aPlusB : Tree String := .node "+" [.leaf "a", .leaf "b"]
 
--- Some first testing: 
 #eval compute aPlusB aPlusB -- (collapsemetanodes := true)
+
+def TEST0 := compute aPlusB aPlusB == some ⟨aPlusB, 0⟩ 
+
+#eval TEST0
 
 def test0 : Tree String := (.node "+" [.leaf "c", aPlusB]) 
 #eval (aPlusB, test0)
 #eval compute aPlusB test0
 
+def TEST1 := compute aPlusB test0 == some ⟨metanode [node "+" [leaf "a", leaf "b"]], 3⟩ 
+
+#eval TEST1
+
 def test1 : Tree String := (.node "+" [aPlusB, .node "+" [.leaf "c", .leaf "b"]])
 #eval (aPlusB, test1)
 #eval compute aPlusB test1 
 #eval compute (.metanode [.leaf "a"]) aPlusB
+
+def TEST2 := compute aPlusB test1 == some ⟨metanode [node "+" [leaf "a", leaf "b"]], 5⟩ 
+def TEST3 := compute aPlusB (.metanode [.leaf "a"]) == some ⟨metanode [leaf "a"], 2⟩ 
+
+def TESTS := TEST0 && TEST1 && TEST2 && TEST3
+
+#eval TESTS
 
 def test2 : Tree String := .node "+" [.node "+" [.leaf "c", .leaf "b"], aPlusB]
 def test3 : Tree String := .node "+" [aPlusB, .node "+" [.node "+" [.leaf "d", .leaf "c"], aPlusB]]
