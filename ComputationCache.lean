@@ -12,6 +12,8 @@ structure Cache (α : Type u) (β : Type v) where
 instance : Inhabited (Cache α β) where 
   default := { cache := [] }
 
+def emptyCache : Cache α β := default
+
 def getFromCache [BEq α] (key : α) : StateM (Cache α β) (Option β) := do 
   let (keys, values) := (← get).cache.unzip
   if keys.contains key then 
