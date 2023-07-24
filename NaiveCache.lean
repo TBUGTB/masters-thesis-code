@@ -1,5 +1,4 @@
 import Std.Data.HashMap
--- import SyntacticSimilarity.LeastCommonGeneralizer
 
 open Lean
 
@@ -27,6 +26,3 @@ def saveToCache [BEq α] (key : α) (val : β) : StateM (Cache α β) PUnit := d
   let currentCache := (← get).cache
   let newCache := (key, some val) :: currentCache 
   modify (fun s => {s with cache := newCache})   
-
-def StateM.run {σ : Type u} {α : Type u} (x : StateM σ α) (s : σ) : (α × σ) :=
-  x s

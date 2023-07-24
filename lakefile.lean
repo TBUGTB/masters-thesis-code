@@ -28,7 +28,7 @@ lean_lib Search {
   -- add any library configuration options here
 }
 
-lean_lib ComputationCache {
+lean_lib NaiveCache {
   -- add any library configuration options here
 }
 

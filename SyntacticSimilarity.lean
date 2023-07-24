@@ -1,45 +1,44 @@
 import IncompleteMatchings
 import HoleTree 
-import ComputationCache
+import NaiveCache
 import Mathlib.Order.WithBot
 
 open HoleTree Tree
 
 namespace SyntacticSimilarity
 
-structure Computation (α : Type) where  
+structure SyntacticSimilarity (α : Type u) where  
   generalizer : Tree α 
   distance : Nat 
 deriving BEq
 
-instance : HAdd (Option (Computation α)) Nat (Option (Computation α)) where 
+instance : HAdd (Option (SyntacticSimilarity α)) Nat (Option (SyntacticSimilarity α)) where 
   hAdd c a := match c with 
     | none => none 
     | some c => some {c with distance := c.distance + a}
 
-instance : Inhabited (Computation α) where 
+instance : Inhabited (SyntacticSimilarity α) where 
   default := ⟨metanode [], 0⟩ 
 
-instance [ToString α] : ToString (Computation α) where 
+instance [ToString α] : ToString (SyntacticSimilarity α) where 
   toString c := toString c.generalizer  ++ " | " ++ toString c.distance
 
 structure Configuration where 
   collapseMetanodes : Bool := true 
   maximumDistance : WithTop Nat := none
-  maximumMetaNodes : WithTop Nat := none
 deriving Repr, BEq, Inhabited 
 
-abbrev ComputationCache (α : Type) := Cache (Tree α × Tree α) (Computation α)
+abbrev SyntacticSimilarityCache (α : Type) := Cache (Tree α × Tree α) (SyntacticSimilarity α)
 
-instance [ToString α] : ToString (ComputationCache α) where 
+instance [ToString α] : ToString (SyntacticSimilarityCache α) where 
   toString c := toString c.cache
 
-abbrev ComputationStateM (α : Type) := StateM (ComputationCache α)
+abbrev SyntacticSimilarityStateM (α : Type) := StateM (SyntacticSimilarityCache α)
 
-abbrev ComputationM (α β : Type) := (ReaderT Configuration (ComputationStateM α)) β
+abbrev SyntacticSimilarityM (α β : Type) := (ReaderT Configuration (SyntacticSimilarityStateM α)) β
 
-def computationOfMinimalDistanceAndIdx : List (Option (Computation α)) → Option (Computation α × Nat)  
-  | x :: xs => let tail := computationOfMinimalDistanceAndIdx xs
+def minimalDistanceSyntacticSimilarityAndIdx? : List (Option (SyntacticSimilarity α)) → Option (SyntacticSimilarity α × Nat)  
+  | x :: xs => let tail := minimalDistanceSyntacticSimilarityAndIdx? xs
                match x, tail with 
                | some v, none => (v, 0)
                | none, some (c, i) => (c, i + 1)
@@ -51,29 +50,21 @@ def computationOfMinimalDistanceAndIdx : List (Option (Computation α)) → Opti
                     (c, i + 1)
   | [] => none
 
--- This must already exist, refactor
-def allValues : List (Option α) → Option (List α) 
-  | [] => some []
-  | x :: xs => match x, allValues xs with 
-               | some v, some tail => v :: tail
-               | _, _ => none
-
-def distances (xs : List (Computation α)) : List Nat := 
+def distances (xs : List (SyntacticSimilarity α)) : List Nat := 
   xs.map (fun x => x.distance)
 
-def distance? (c : Option (Computation α)) : Option Nat := 
-  match c with 
+def distance? : Option (SyntacticSimilarity α) → Option Nat  
   | none => none
   | some c => c.distance
 
-def generalizers (xs : List (Computation α)) : List (Tree α) := 
+def generalizers (xs : List (SyntacticSimilarity α)) : List (Tree α) := 
   xs.map (fun x => x.generalizer)
 
-def cumulativeDistance (xs : List (Computation α)) : Nat := 
+def cumulativeDistance (xs : List (SyntacticSimilarity α)) : Nat := 
   (distances xs).foldl (· + ·) 0 
 
-def computationOfMinimalDistance (xs : List (Option (Computation α))) : Option (Computation α) := 
-  match computationOfMinimalDistanceAndIdx xs with 
+def minimalDistanceSyntacticSimilarity (xs : List (Option (SyntacticSimilarity α))) : Option (SyntacticSimilarity α) := 
+  match minimalDistanceSyntacticSimilarityAndIdx? xs with 
   | none => none
   | some (c, _) => c
 
@@ -86,17 +77,17 @@ def Configuration.reduceMaximumDistanceBy (c : Configuration) (n : Nat) :=
   {c with maximumDistance := c.maximumDistance - n}
 
 def withAddToDistanceAfterCalculation (n : Nat) : 
-  ComputationM α (Option (Computation β)) → ComputationM α (Option (Computation β)) := 
+  SyntacticSimilarityM α (Option (SyntacticSimilarity β)) → SyntacticSimilarityM α (Option (SyntacticSimilarity β)) := 
   fun x => (withReader $ fun y => y.reduceMaximumDistanceBy n) do 
     x
   >>= fun x => pure (x + n)
 
-def Computation.distanceDoesNotExceedMaximum (c : Computation α) : ComputationM α Bool := do 
+def SyntacticSimilarity.distanceDoesNotExceedMaximum (c : SyntacticSimilarity α) : SyntacticSimilarityM α Bool := do 
   let maximumDistance := (← read).maximumDistance
   pure $ c.distance < maximumDistance
 
-def saveAndReturnIfOptimal [BEq α] (key : Tree α × Tree α) (c : Computation α) : 
-  ComputationM α (Option (Computation α)) := do
+def saveAndReturnIfOptimal [BEq α] (key : Tree α × Tree α) (c : SyntacticSimilarity α) : 
+  SyntacticSimilarityM α (Option (SyntacticSimilarity α)) := do
   if (← c.distanceDoesNotExceedMaximum) then 
     saveToCache key c
     pure (some c) 
@@ -104,32 +95,32 @@ def saveAndReturnIfOptimal [BEq α] (key : Tree α × Tree α) (c : Computation 
     pure none 
 
 partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : Tree α) : 
-  ComputationM α (Option (Computation α)) := do
+  SyntacticSimilarityM α (Option (SyntacticSimilarity α)) := do
     
-    let getFromCache t := @getFromCache _ (Computation α) _ t
+    let getFromCache t := @getFromCache _ (SyntacticSimilarity α) _ t
 
-    let saveAndReturn (c : Computation α) : ComputationM α (Option (Computation α)) := 
+    let saveAndReturn (c : SyntacticSimilarity α) : SyntacticSimilarityM α (Option (SyntacticSimilarity α)) := 
       saveAndReturnIfOptimal (tree1, tree2) c
 
-    let saveAndReturnMinimalCostComputation (xs : List (Option (Computation α))) :
-      ComputationM α (Option (Computation α)) := 
-      match computationOfMinimalDistance xs with 
+    let saveAndReturnMinimalCostSyntacticSimilarity (xs : List (Option (SyntacticSimilarity α))) :
+      SyntacticSimilarityM α (Option (SyntacticSimilarity α)) := 
+      match minimalDistanceSyntacticSimilarity xs with 
       | none => pure none
-      | some minimalComputation => saveAndReturn minimalComputation 
+      | some minimalSyntacticSimilarity => saveAndReturn minimalSyntacticSimilarity 
 
-    let computeNodeList (t : Tree α) (xs : List (Tree α)) : ComputationM α (Option (Computation α)) := 
+    let computeNodeList (t : Tree α) (xs : List (Tree α)) : SyntacticSimilarityM α (Option (SyntacticSimilarity α)) := 
       if xs == [] then 
-        saveAndReturn ⟨metanode [], t.size + 1⟩ 
+        saveAndReturn ⟨metanode [], t.numberOfNodes⟩ 
       else do
         let computations ← xs.mapM (fun x => computeWithCache t x)
-        match computationOfMinimalDistanceAndIdx computations with 
+        match minimalDistanceSyntacticSimilarityAndIdx? computations with 
         | none => pure none 
         | some (minimizer, minimizerIdx) =>
             let generalizer := metanode $ [minimizer.generalizer]
-            let distance := minimizer.distance + size (xs.eraseIdx minimizerIdx) + 1
+            let distance := minimizer.distance + numberOfNodes (xs.eraseIdx minimizerIdx) + 1
             saveAndReturn ⟨generalizer, distance⟩
 
-    let computeListList (xs : List (Tree α)) (ys : List (Tree α)) : ComputationM α (Option (Computation α)) := do
+    let computeListList (xs : List (Tree α)) (ys : List (Tree α)) : SyntacticSimilarityM α (Option (SyntacticSimilarity α)) := do
       let (shorter, longer) := shorterAndLonger xs ys
       let m := longer.length 
 
@@ -143,7 +134,7 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
         let IdxsOfChildrenNotInMatching := (List.range m).removeAll matchingList
         let matching := List.asFunction matchingList
         
-        let costOfDeletingChildren := size (IdxsOfChildrenNotInMatching.map (fun i => longer[matching i]!))
+        let costOfDeletingChildren := numberOfNodes (IdxsOfChildrenNotInMatching.map (fun i => longer[matching i]!))
         let distance := cost + costOfDeletingChildren
         let resultingChildren := computations.mapIdx (fun i x => 
                                   match x[matching i]! with 
@@ -161,7 +152,7 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
       | node v [], node w [] => saveAndReturn $ if v==w then ⟨node v [], 0⟩ else ⟨metanode [], 2⟩
 
       | metanode xs, metanode []
-      | metanode [], metanode xs => saveAndReturn ⟨metanode [], size xs⟩
+      | metanode [], metanode xs => saveAndReturn ⟨metanode [], numberOfNodes xs⟩
       
       | node v vs, node w ws =>  
         let leftInRight ← withAddToDistanceAfterCalculation 1 do 
@@ -172,21 +163,21 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
           computeWithCache (metanode ws) (metanode vs)
         if v == w then 
           let result ← (vs.zip ws).mapM (fun (x, y) => computeWithCache x y) 
-          match allValues result with 
-          | none => saveAndReturnMinimalCostComputation [leftInRight, rightInLeft, bothMetified]
+          match valuesIfNoNone result with 
+          | none => saveAndReturnMinimalCostSyntacticSimilarity [leftInRight, rightInLeft, bothMetified]
           | some children => 
               let generalizer := node v $ generalizers children
               let distance := cumulativeDistance children
-              let result : Computation α := ⟨generalizer, distance⟩ 
-              saveAndReturnMinimalCostComputation [leftInRight, rightInLeft, bothMetified, result]
+              let result : SyntacticSimilarity α := ⟨generalizer, distance⟩ 
+              saveAndReturnMinimalCostSyntacticSimilarity [leftInRight, rightInLeft, bothMetified, result]
         else 
-          saveAndReturnMinimalCostComputation [leftInRight, rightInLeft, bothMetified]
+          saveAndReturnMinimalCostSyntacticSimilarity [leftInRight, rightInLeft, bothMetified]
 
       | metanode xs, metanode ys => 
         let matchNodes ← computeListList xs ys
         let matchLeftBelowRight ← computeNodeList (metanode xs) ys
         let matchRightBelowLeft ← computeNodeList (metanode xs) ys
-        saveAndReturnMinimalCostComputation [matchNodes, matchLeftBelowRight, matchRightBelowLeft] 
+        saveAndReturnMinimalCostSyntacticSimilarity [matchNodes, matchLeftBelowRight, matchRightBelowLeft] 
       
       | node v xs, metanode ys 
       | metanode ys, node v xs => 
@@ -195,32 +186,32 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
         let insertAboveNode ← withAddToDistanceAfterCalculation 1 do 
           computeNodeList (node v xs) ys
         let metanodeMappedToRoot ← computeNodeList (node v xs) ys
-        saveAndReturnMinimalCostComputation [metanodeMappedToRoot, convertNode, insertAboveNode] 
+        saveAndReturnMinimalCostSyntacticSimilarity [metanodeMappedToRoot, convertNode, insertAboveNode] 
 
 def computeAux [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) 
-  (configuration : Configuration) (cache : ComputationCache α) : 
-  Option (Computation α) × ComputationCache α := 
-  ReaderT.run (computeWithCache t1 t2) configuration cache |>.run
+  (configuration : Configuration) (cache : SyntacticSimilarityCache α) : 
+  Option (SyntacticSimilarity α) × SyntacticSimilarityCache α := 
+  ReaderT.run (computeWithCache t1 t2) configuration cache 
 
 def compute' [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) (configuration : Configuration) : 
-  Option (Computation α) × ComputationCache α := 
+  Option (SyntacticSimilarity α) × SyntacticSimilarityCache α := 
   let initialState := emptyCache
-  ReaderT.run (computeWithCache t1 t2) configuration initialState |>.run
+  ReaderT.run (computeWithCache t1 t2) configuration initialState 
   
-def computeTest [ToString α] [BEq α] : Tree α → Tree α → Option (Computation α) := 
-  fun t1 t2 => (compute' t1 t2 ⟨true, none, none⟩).fst
+def computeTest [ToString α] [BEq α] : Tree α → Tree α → Option (SyntacticSimilarity α) := 
+  fun t1 t2 => (compute' t1 t2 ⟨true, none⟩).fst
 
 #eval computeTest (node "+" [leaf "a", leaf "b"]) (node "*" [node "+" [leaf "a", leaf "b"]])
 
 def computeUpTo [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) (collapseMetaNodes : Bool := true) : 
-  (n : Nat) → Option (Computation α) × ComputationCache α 
-  | 0 => let initialConfiguration := ⟨collapseMetaNodes, some 1, ⊤⟩ 
+  (n : Nat) → Option (SyntacticSimilarity α) × SyntacticSimilarityCache α 
+  | 0 => let initialConfiguration := ⟨collapseMetaNodes, some 1⟩ 
          computeAux t1 t2 initialConfiguration emptyCache 
   | n + 1 => match computeUpTo t1 t2 collapseMetaNodes n with 
              | (some c, cache) => (c, cache)
-             | (none, cache) => let configuration := ⟨collapseMetaNodes, some (n+1), none⟩ 
+             | (none, cache) => let configuration := ⟨collapseMetaNodes, some (n+1)⟩ 
                                 computeAux t1 t2 configuration cache
 
-def compute [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) : Option $ Computation α := 
+def compute [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) : Option $ SyntacticSimilarity α := 
   -- compute' t1 t2 |>.fst
   computeUpTo t1 t2 true 100 |>.fst

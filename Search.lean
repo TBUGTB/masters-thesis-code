@@ -58,6 +58,6 @@ def bestSyntacticLibraryMatch (e : Expr) (libraryLemmas : List Name) : TacticM N
     dbg_trace "... calculating distance between goal and {lem} ..."
     let lemTree ← createExprTreeFromLemmaName lem
     let computation := SyntacticSimilarity.compute tree lemTree
-    -- dbg_trace f!"{computation.distance} {tree.size} {lemTree.size} {tree} \n {lemTree}"
+    -- dbg_trace f!"{computation.distance} {tree.numberOfNodes} {lemTree.numberOfNodes} {tree} \n {lemTree}"
     (currentDistance, currentMinimizer) := nextLibraryMatch currentDistance computation.distance currentMinimizer lem    
   pure currentMinimizer

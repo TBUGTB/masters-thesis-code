@@ -7,8 +7,8 @@ A tree datatype that represent syntax trees including annotated holes. A hole is
 annotations are given through a List. Trees whose meta-nodes share the same annotations up to permutation
 of the list should be considered as equivalent. 
 -/
-inductive Tree (α : Type) := 
-  | node (value : α) (children : List (Tree α)) : Tree α
+inductive Tree (α : Type u) := 
+  | node (label : α) (children : List (Tree α)) : Tree α
   | metanode (annotations : List (Tree α)) : Tree α
 deriving BEq
 
@@ -30,17 +30,17 @@ instance [ToString α] : ToString (Tree α) where
 
 def Tree.leaf (value : α) : Tree α := Tree.node value []
 
-def Tree.size : Tree α → Nat 
+def Tree.numberOfNodes : Tree α → Nat 
   | node _ [] 
   | metanode [] => 1 
-  | node v (x::xs) => x.size + (node v xs).size
-  | metanode (x::xs) => x.size + (metanode xs).size   
+  | node v (x::xs) => x.numberOfNodes + (node v xs).numberOfNodes
+  | metanode (x::xs) => x.numberOfNodes + (metanode xs).numberOfNodes   
 
-#eval (.node "+" [.leaf "a", .leaf "b"] : Tree String).size == 3
+#eval (.node "+" [.leaf "a", .leaf "b"] : Tree String).numberOfNodes == 3
 
-def size : List (Tree α) → Nat 
+def numberOfNodes : List (Tree α) → Nat 
   | [] => 0
-  | x::xs => x.size + size xs
+  | x::xs => x.numberOfNodes + numberOfNodes xs
 
 /-- 
 Returns true if all annotations of the first tree can be permuted such that 

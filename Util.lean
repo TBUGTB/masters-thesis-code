@@ -29,3 +29,11 @@ def List.equalUpToPermutation [BEq α] : List α → List α → Bool
   | [], _ => false
   | x :: xs, ys => if ys.contains x 
                    then equalUpToPermutation xs (ys.erase x) else false
+/--
+If the list does not contain any `none`, returns a list of all the values of the options.   
+-/
+def valuesIfNoNone : List (Option α) → Option (List α) 
+  | [] => some []
+  | x :: xs => match x, valuesIfNoNone xs with 
+               | some v, some tail => v :: tail
+               | _, _ => none

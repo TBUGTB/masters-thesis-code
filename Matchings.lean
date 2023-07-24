@@ -1,7 +1,7 @@
 import Std.Data.List.Basic
 
 /--
-Given a cost matrix of dimensions `n`, `m` one can represent a matching as a list of size `n` whose 
+Given a cost matrix of dimensions `n`, `m` one can represent a matching as a list of numberOfNodes `n` whose 
 entries are unique elements of `{0..m-1}`. This function returns a list of all possible such matchings. 
 -/
 def allMatchings (n : Nat) (m : Nat) : List (List Nat) := 
