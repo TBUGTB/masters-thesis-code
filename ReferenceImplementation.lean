@@ -5,103 +5,136 @@ open HoleTree Tree
 
 namespace SyntacticSimilarity
 
-structure SyntacticSimilarity (α : Type u) where  
+structure Similarity (α : Type u) where  
   generalizer : Tree α 
   distance : Nat 
 deriving BEq
 
-instance : Inhabited (SyntacticSimilarity α) where 
+instance : Inhabited (Similarity α) where 
   default := ⟨.metanode [], 0⟩ 
 
-instance [ToString α] : ToString (SyntacticSimilarity α) where 
+instance [ToString α] : ToString (Similarity α) where 
   toString c := toString c.generalizer  ++ " | " ++ toString c.distance
 
-instance : HAdd (SyntacticSimilarity α) Nat (SyntacticSimilarity α) where 
+instance : HAdd (Similarity α) Nat (Similarity α) where 
   hAdd c a := {c with distance := c.distance + a}
 
-def distances (xs : List (SyntacticSimilarity α)) : List Nat := 
+def distances (xs : List (Similarity α)) : List Nat := 
   xs.map (fun x => x.distance)
 
-def generalizers (xs : List (SyntacticSimilarity α)) : List (Tree α) := 
+def generalizers (xs : List (Similarity α)) : List (Tree α) := 
   xs.map (fun x => x.generalizer)
 
-def cumulativeDistance (xs : List (SyntacticSimilarity α)) : Nat := 
+def cumulativeDistance (xs : List (Similarity α)) : Nat := 
   (distances xs).foldl (· + ·) 0 
 
 /--
 Returns the first entry of a list of syntactic similarities whose distance value is minimal and its index. 
 -/
-def minimalDistanceSyntacticSimilarityAndIdx : List (SyntacticSimilarity α) → SyntacticSimilarity α × Nat  
+def minimalDistanceSimilarityAndIdx : List (Similarity α) → Similarity α × Nat  
   | [x] => (x, 0)
   | x :: xs => if x.distance == 0 then -- skip tail calculation if x is optimal
                  (x, 0) 
                else 
-                 let (tailMinimalDistanceSyntacticSimilarity, idx) := minimalDistanceSyntacticSimilarityAndIdx xs
-                 if x.distance < tailMinimalDistanceSyntacticSimilarity.distance then 
+                 let (tailMinimalDistanceSimilarity, idx) := minimalDistanceSimilarityAndIdx xs
+                 if x.distance < tailMinimalDistanceSimilarity.distance then 
                    (x, 0) 
                  else 
-                   (tailMinimalDistanceSyntacticSimilarity, idx + 1)
-  | [] => panic! default -- should never occur 
+                   (tailMinimalDistanceSimilarity, idx + 1)
+  | [] => panic! "Cannot find the minimal distance syntactic similarity in empty list" 
 
-def minimalDistanceSyntacticSimilarity (xs : List (SyntacticSimilarity α)) : SyntacticSimilarity α := 
-  minimalDistanceSyntacticSimilarityAndIdx xs |>.fst
+def minimalDistanceSimilarity (xs : List (Similarity α)) : Similarity α := 
+  minimalDistanceSimilarityAndIdx xs |>.fst
 
-partial def compute [BEq α] (tree1 : Tree α) (tree2 : Tree α) : SyntacticSimilarity α := 
+partial def compute [ToString α] [BEq α] (tree1 : Tree α) (tree2 : Tree α) : Similarity α := 
   
-  let computeNodeList (t : Tree α) (xs : List (Tree α)) : SyntacticSimilarity α := 
+  let matchBelowOneOf (t : Tree α) (xs : List (Tree α)) : Similarity α := 
     if xs == [] then 
       ⟨metanode [], t.numberOfNodes⟩ 
     else
-      let computations := xs.map (fun x => compute t x)
-      let (minimizer, minimizerIdx) := minimalDistanceSyntacticSimilarityAndIdx computations
+      let pairwiseSimilarity := xs.map (fun x => compute t x)
+      let (minimizer, minimizerIdx) := minimalDistanceSimilarityAndIdx pairwiseSimilarity
       let generalizer := metanode [minimizer.generalizer]
       let distance := minimizer.distance + numberOfNodes (xs.eraseIdx minimizerIdx) + 1
       ⟨generalizer, distance⟩
+    
+  let nodesMatchAtOrdinaryNodeRoot (label : α) (children1 : List (Tree α)) (children2 : List (Tree α)) 
+    : Similarity α := 
+    let pairwiseSimilarities := List.zipWith compute children1 children2
+    let distance := cumulativeDistance pairwiseSimilarities
+    let generalizer := node label (generalizers pairwiseSimilarities)
+    ⟨generalizer, distance⟩ 
 
-  let computeListList (xs : List (Tree α)) (ys : List (Tree α)) : SyntacticSimilarity α := 
-    let (shorter, longer) := shorterAndLonger xs ys
+  let nodesDontMatch (label1 : α) (children1 : List (Tree α)) 
+                     (label2 : α) (children2 : List (Tree α)) : Similarity α :=
+    let firstMatchesInChildNodeOfSecond := matchBelowOneOf (node label1 children1) children2 + 1
+    let secondMatchesInChildNodeOfFirst := matchBelowOneOf (node label2 children2) children1 + 1
+    minimalDistanceSimilarity [firstMatchesInChildNodeOfSecond, secondMatchesInChildNodeOfFirst]
+
+  let nodesMatchAtMetaNodeRoot (children1 : List (Tree α)) (children2 : List (Tree α)) : Similarity α := 
+    compute (metanode children1) (metanode children2) + 2
+
+  let similarityOfNodesWithDifferentLabels (label1 : α) (children1 : List (Tree α)) 
+                                           (label2 : α) (children2 : List (Tree α)) : Similarity α :=
+    let case1 := nodesMatchAtMetaNodeRoot children1 children2
+    let case2 := nodesDontMatch label1 children1 label2 children2
+    minimalDistanceSimilarity [case1, case2]
+
+  let similarityOfNodesWithIdenticalLabels (label : α) (children1 : List (Tree α)) (children2 : List (Tree α)) : Similarity α :=
+    let case1a := nodesMatchAtOrdinaryNodeRoot label children1 children2
+    let case1b := nodesMatchAtMetaNodeRoot children1 children2
+    let case2 := nodesDontMatch label children1 label children2
+    minimalDistanceSimilarity [case1a, case1b, case2]
+
+  let metaNodesMatchAtRoot (annotations1 : List (Tree α)) (annotations2 : List (Tree α)) : Similarity α := 
+    let (shorter, longer) := shorterAndLonger annotations1 annotations2
     let m := longer.length 
 
-    let computations := shorter.map (fun a => longer.map (fun b => compute a b)) 
+    let similarities := shorter.map (fun a => longer.map (fun b => compute a b))
     
-    let costMatrix := computations.map (fun as => as.map (fun b => b.distance))
+    let costMatrix := similarities.map (fun as => as.map (fun b => b.distance))
     let (cost, matchingList) := minimalMatching costMatrix
-    let IdxsOfChildrenNotInMatching := (List.range m).removeAll matchingList
+    let IdxsOfAnnotationsNotInMatching := (List.range m).removeAll matchingList
     let matching := List.asFunction matchingList
     
-    let costOfDeletingAnnotations := numberOfNodes (IdxsOfChildrenNotInMatching.map (fun i => longer[matching i]!))
+    let costOfDeletingAnnotations := numberOfNodes (IdxsOfAnnotationsNotInMatching.map (fun i => longer[matching i]!))
     let distance := cost + costOfDeletingAnnotations
-    let resultingChildren := computations.mapIdx (fun i x => x[matching i]!.generalizer)
-    let generalizer := metanode resultingChildren 
+    let resultingAnnotations := similarities.mapIdx (fun i x => x[matching i]!.generalizer)
+    let generalizer := metanode resultingAnnotations 
 
     ⟨generalizer, distance⟩
 
-  let computeNodesWithDifferentValue (lvalue : α) (ls : List (Tree α)) 
-                                     (rvalue : α) (rs : List (Tree α)) : SyntacticSimilarity α := 
-    let leftInRight := computeNodeList (node lvalue ls) rs + 1
-    let rightInLeft := computeNodeList (node rvalue rs) ls + 1
-    let bothMetified := compute (metanode ls) (metanode rs) + 2
-    minimalDistanceSyntacticSimilarity [leftInRight, rightInLeft, bothMetified]
-    
+  let metaNodesDontMatch (annotations1 : List (Tree α)) (annotations2 : List (Tree α)) : Similarity α :=
+    let firstMatchesInAnnotationOfSecond := matchBelowOneOf (metanode annotations1) annotations2
+    let secondMatchesInAnnotationOfFirst := matchBelowOneOf (metanode annotations2) annotations1
+    minimalDistanceSimilarity [firstMatchesInAnnotationOfSecond, secondMatchesInAnnotationOfFirst]
+
   let result := match tree1, tree2 with
-  | node v [], node w [] => if v==w then ⟨node v [], 0⟩ else ⟨metanode [], 2⟩
-  | metanode xs, metanode [] 
-  | metanode [], metanode xs => ⟨metanode [], numberOfNodes xs⟩ 
-  | node v xs, node w ys => if v == w && xs.length == ys.length then 
-                              let computations := List.zipWith compute xs ys
-                              let distance := cumulativeDistance computations
-                              let generalizer := node v (generalizers computations)
-                              minimalDistanceSyntacticSimilarity [⟨generalizer, distance⟩, computeNodesWithDifferentValue v xs w ys]
+  | node v [], node w [] => if v==w then 
+                              ⟨node v [], 0⟩ 
                             else 
-                              computeNodesWithDifferentValue v xs w ys
-  | metanode xs, metanode ys => let matchNodes := computeListList xs ys
-                                let matchLeftBelowRight := computeNodeList (metanode xs) ys
-                                let matchRightBelowLeft := computeNodeList (metanode xs) ys
-                                minimalDistanceSyntacticSimilarity [matchNodes, matchLeftBelowRight, matchRightBelowLeft]
+                              ⟨metanode [], 2⟩
+
+  | metanode xs, metanode [] 
+  | metanode [], metanode xs => let generalizer := metanode []
+                                let distance := numberOfNodes xs
+                                ⟨generalizer, distance⟩ 
+  
+  | node v xs, node w ys => if v == w && xs.length == ys.length then 
+                              similarityOfNodesWithIdenticalLabels v xs ys
+                            else 
+                              similarityOfNodesWithDifferentLabels v xs w ys
+  
+  | metanode xs, metanode ys => let case1 := metaNodesMatchAtRoot xs ys
+                                let case2 := metaNodesDontMatch xs ys
+                                minimalDistanceSimilarity [case1, case2]
+  
   | node v xs, metanode ys 
-  | metanode ys, node v xs => let convertNode := compute (metanode xs) (metanode ys) + 1
-                              let insertAboveNode := computeNodeList (node v xs) ys + 1
-                              let metanodeMappedToRoot := computeNodeList (node v xs) ys
-                              minimalDistanceSyntacticSimilarity [metanodeMappedToRoot, convertNode, insertAboveNode] 
+  | metanode ys, node v xs => let matchAtRoot := compute (metanode xs) (metanode ys) + 1
+                              let onlyNodeMappedToRoot := matchBelowOneOf (metanode ys) xs + 1
+                              let onlyMetanodeMappedToRoot := matchBelowOneOf (node v xs) ys
+                              minimalDistanceSimilarity [matchAtRoot, onlyNodeMappedToRoot, onlyMetanodeMappedToRoot]
+
+  -- dbg_trace "{tree1} | {tree2} => {result}"
 
   result

@@ -22,14 +22,6 @@ def List.asFunction (m : List Nat) : (Nat → Nat) :=
   | some v => v
 
 /--
-Returns true if the two given lists are equal up to permutation else false. 
--/
-def List.equalUpToPermutation [BEq α] : List α → List α → Bool 
-  | [], [] => true
-  | [], _ => false
-  | x :: xs, ys => if ys.contains x 
-                   then equalUpToPermutation xs (ys.erase x) else false
-/--
 If the list does not contain any `none`, returns a list of all the values of the options.   
 -/
 def valuesIfNoNone : List (Option α) → Option (List α) 

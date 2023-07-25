@@ -2,11 +2,6 @@ import Util
 
 namespace HoleTree
 
-/--
-A tree datatype that represent syntax trees including annotated holes. A hole is called meta-node and its 
-annotations are given through a List. Trees whose meta-nodes share the same annotations up to permutation
-of the list should be considered as equivalent. 
--/
 inductive Tree (α : Type u) := 
   | node (label : α) (children : List (Tree α)) : Tree α
   | metanode (annotations : List (Tree α)) : Tree α
@@ -41,21 +36,6 @@ def Tree.numberOfNodes : Tree α → Nat
 def numberOfNodes : List (Tree α) → Nat 
   | [] => 0
   | x::xs => x.numberOfNodes + numberOfNodes xs
-
-/-- 
-Returns true if all annotations of the first tree can be permuted such that 
-it becomes equal to the second tree.
--/
-def Tree.equivalentTo [BEq α]: Tree α → Tree α → Bool
-  | node v [], node w [] => if v==w then true else false 
-  | node v (x::xs), node w (y::ys) => 
-    if x==y then (node v xs).equivalentTo (node w ys) 
-            else false 
-  | metanode xs, metanode ys => List.equalUpToPermutation xs ys
-  | _, _ => false
-
-#eval (.metanode [.leaf "a", .leaf "b"] : Tree String).equivalentTo 
-      (.metanode [.leaf "b", .leaf "a"])
 
 def countMakemetanodeChildrenListMembers : List (Tree α) → List (Tree α) × Nat
   | [] => ([], 0)
