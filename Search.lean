@@ -52,12 +52,19 @@ def nextLibraryMatch (currentDistance : Option Nat) (distance : Nat) (currentNam
 open Lean.Elab.Tactic in 
 def bestSyntacticLibraryMatch (e : Expr) (libraryLemmas : List Name) : TacticM Name := do
   let tree ← e.toTree
+  dbg_trace s!"Goal: {tree}"
   let mut currentMinimizer : Name := ``Nat
   let mut currentDistance : Option Nat := none
   for lem in libraryLemmas do 
-    dbg_trace "... calculating distance between goal and {lem} ..."
     let lemTree ← createExprTreeFromLemmaName lem
     let computation := SyntacticSimilarity.compute tree lemTree
     -- dbg_trace f!"{computation.distance} {tree.numberOfNodes} {lemTree.numberOfNodes} {tree} \n {lemTree}"
-    (currentDistance, currentMinimizer) := nextLibraryMatch currentDistance computation.distance currentMinimizer lem    
+    match computation with 
+    | some computation => 
+      dbg_trace s!"{lem}: {computation.distance}"
+      dbg_trace s!"  {lemTree}"
+      dbg_trace s!"  {computation.generalizer}"
+      (currentDistance, currentMinimizer) := 
+        nextLibraryMatch currentDistance computation.distance currentMinimizer lem    
+    | none => pure ()  
   pure currentMinimizer

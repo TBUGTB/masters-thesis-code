@@ -2,7 +2,7 @@ import Search
 
 open Lean Lean.Meta
 
-def libraryLemmaNames := [``Nat.mul_comm, ``Nat.add_comm, ``Nat.add_assoc]
+def libraryLemmaNames := [``Nat.mul_comm, ``Nat.mul_assoc, ``Nat.add_comm, ``Nat.add_assoc]
 
 elab "library_similarity_search" : tactic =>
   Lean.Elab.Tactic.withMainContext do
@@ -25,8 +25,4 @@ example : ∀a b c : Nat, (a + b) + c = a + (b + c) + 0 := by
   library_similarity_search
 
 example : ∀a b : Nat, ((((a + b) ^ 2) ^ 2) ^ 2) = ((((b + a) ^ 2) ^ 2) ^ 2) := by 
-  -- library_similarity_search -- takes a bit longer so commented out 
-  sorry
-  
-  -- The search finds the correct lemma, but 
-  -- Aesop doesn't succeed in this case. Passing add_comm to simp or rw works
+  library_similarity_search 

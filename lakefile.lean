@@ -39,3 +39,7 @@ lean_lib IncompleteMatchings {
 lean_lib SyntacticSimilarity {
   -- add any library configuration options here
 }
+
+lean_lib HashMapCache {
+  -- add any library configuration options here
+}

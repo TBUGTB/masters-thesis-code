@@ -1,4 +1,5 @@
 import Util
+import Mathlib.Data.List.Sort 
 
 namespace HoleTree
 
@@ -10,7 +11,7 @@ deriving BEq
 instance : Inhabited (Tree α) where 
   default := .metanode []
 
-def treeListToString [ToString α] (treeList : List (Tree α)) : String :=  
+partial def treeListToString [ToString α] (treeList : List (Tree α)) : String :=  
   let rec treeToString : Tree α → String
       | .node v [] => toString v
       | .node v c => toString v ++ " [" ++ treeListToString c ++ "]"
@@ -83,7 +84,7 @@ def Tree.countCollapseMetanodes (t : Tree α) : Tree α × Nat :=
 /--
 Returns a string that can be used to render the given trees with the tikz forest package. 
 -/
-def treeListToTikzForest [ToString α] (treeList : List (Tree α)) : String :=  
+partial def treeListToTikzForest [ToString α] (treeList : List (Tree α)) : String :=  
   let rec treeToTikzForest : Tree α → String
       | .node v [] => "[" ++ toString v ++ "]"
       | .node v c => "[" ++ toString v ++ treeListToTikzForest c ++ "]"
@@ -98,3 +99,17 @@ Returns a string that can be used to render the given tree with the tikz forest 
 -/
 def Tree.toTikzForest [ToString α] (tree: Tree α) : String := 
   treeListToTikzForest [tree]
+
+partial def treeListHash [Hashable α] : List (Tree α) → UInt64 
+  | [] => hash 0
+  | .node v vs :: xs => let tailHash := treeListHash xs
+                        let childHash := treeListHash vs  
+                        mixHash (mixHash (hash v) (childHash)) tailHash
+  | .metanode as :: xs => let tailHash := treeListHash xs
+                        let metaNodeHashes := as.map (fun y => treeListHash [y])
+                        let sortedHashes := metaNodeHashes.mergeSort (fun x y => x < y)
+                        let metaNodeHash := sortedHashes.foldl mixHash (hash 0)
+                        mixHash metaNodeHash tailHash
+
+instance [Hashable α] : Hashable (Tree α) where 
+  hash tree := treeListHash [tree]

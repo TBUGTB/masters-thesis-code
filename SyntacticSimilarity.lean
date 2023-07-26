@@ -1,6 +1,6 @@
 import IncompleteMatchings
 import HoleTree 
-import NaiveCache
+import HashMapCache
 import Mathlib.Order.WithBot
 
 open HoleTree Tree
@@ -59,14 +59,17 @@ structure Configuration where
   maximumDistance : WithTop Nat := ⊤
 deriving Repr, BEq, Inhabited 
 
-abbrev SimilarityCache (α : Type u) := Cache (Tree α × Tree α) (Similarity α)
+instance [BEq α] : BEq (Tree α × Tree α) where 
+  beq x y := x.fst == y.fst && x.snd == y.snd
 
-instance [ToString α] : ToString (SimilarityCache α) where 
-  toString c := toString c.cache
+abbrev SimilarityCache (α : Type) [BEq α] [Hashable α] := Cache (Tree α × Tree α) (Similarity α)
 
-abbrev SimilarityStateM (α : Type u) := StateM (SimilarityCache α)
+-- instance [ToString α] : ToString (SimilarityCache α) where 
+--   toString c := toString c.cache
 
-abbrev ComputationM (α β : Type) := (ReaderT Configuration (SimilarityStateM α)) β
+abbrev SimilarityStateM (α : Type) [BEq α] [Hashable α] := StateM (SimilarityCache α)
+
+abbrev ComputationM (α β : Type) [BEq α] [Hashable α] := (ReaderT Configuration (SimilarityStateM α)) β
 
 instance : HSub (WithTop Nat) Nat (Option Nat) where 
   hSub x y := match x with 
@@ -75,6 +78,8 @@ instance : HSub (WithTop Nat) Nat (Option Nat) where
 
 def Configuration.reduceMaximumDistanceBy (c : Configuration) (n : Nat) := 
   {c with maximumDistance := c.maximumDistance - n}
+
+variable {α : Type} [BEq α] [Hashable α]
 
 def withAddToDistanceAfterCalculation (n : Nat) (x : ComputationM α (Option (Similarity β))) : 
   ComputationM α (Option (Similarity β)) := 
@@ -86,7 +91,7 @@ def Similarity.distanceDoesNotExceedMaximum (c : Similarity α) : ComputationM �
   let maximumDistance := (← read).maximumDistance
   pure $ c.distance <= maximumDistance
 
-def saveUnderKeyAndReturnIfValid [BEq α] [ToString α] (key : Tree α × Tree α) (similarity : Similarity α) : 
+def saveUnderKeyAndReturnIfValid [BEq α] [ToString α] [Hashable α] (key : Tree α × Tree α) (similarity : Similarity α) : 
   ComputationM α (Option (Similarity α)) := do
   if (← similarity.distanceDoesNotExceedMaximum) then 
     saveToCache key similarity
@@ -94,25 +99,12 @@ def saveUnderKeyAndReturnIfValid [BEq α] [ToString α] (key : Tree α × Tree �
   else 
     pure none 
 
-partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : Tree α) : 
-  ComputationM α (Option (Similarity α)) := do
+section 
 
-  let saveAndReturnIfValid (c : Similarity α) : ComputationM α (Option (Similarity α)) := 
-    saveUnderKeyAndReturnIfValid (tree1, tree2) c
+variable [ToString α] 
+         (computeWithCache : Tree α → Tree α → ComputationM α (Option (Similarity α)))
 
-  let saveAndReturnMinimalDistanceSimilarity 
-    (xs : List (Option (Similarity α))) : ComputationM α (Option (Similarity α)) := 
-    match minimalDistanceSimilarity? xs with 
-    | none => pure none
-    | some minimalDistanceSimilarity => saveAndReturnIfValid minimalDistanceSimilarity 
-
-  let returnMinimalDistanceSimilarity 
-    (xs : List (Option (Similarity α))) : ComputationM α (Option (Similarity α)) := 
-    match minimalDistanceSimilarity? xs with 
-    | none => pure none
-    | some minimalDistanceSimilarity => pure minimalDistanceSimilarity 
-
-  let matchBelowOneOf (t : Tree α) (xs : List (Tree α)) : ComputationM α (Option (Similarity α)) := 
+  def matchBelowOneOf (t : Tree α) (xs : List (Tree α)) : ComputationM α (Option (Similarity α)) := 
     if xs == [] then 
       pure <| some ⟨metanode [], t.numberOfNodes⟩ 
     else do
@@ -124,7 +116,7 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
           let distance := minimizer.distance + numberOfNodes (xs.eraseIdx minimizerIdx) + 1
           pure <| some ⟨generalizer, distance⟩
 
-  let nodesMatchAtOrdinaryNodeRoot (label : α) (children1 : List (Tree α)) (children2 : List (Tree α)) 
+  def nodesMatchAtOrdinaryNodeRoot (label : α) (children1 : List (Tree α)) (children2 : List (Tree α)) 
     : ComputationM α (Option (Similarity α)) := do 
     let pairwiseSimilarities ← (children1.zip children2).mapM (fun (x, y) => computeWithCache x y) 
     match valuesIfNoNone pairwiseSimilarities with 
@@ -134,34 +126,14 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
       let generalizer := node label (generalizers childSimilarities)
       pure <| some ⟨generalizer, distance⟩ 
 
-  let nodesDontMatch (label1 : α) (children1 : List (Tree α)) 
-                     (label2 : α) (children2 : List (Tree α)) : ComputationM α (Option (Similarity α)) := do
-    let firstMatchesInChildNodeOfSecond := (← matchBelowOneOf (node label1 children1) children2) + 1
-    let secondMatchesInChildNodeOfFirst := (← matchBelowOneOf (node label2 children2) children1) + 1
-    returnMinimalDistanceSimilarity [firstMatchesInChildNodeOfSecond, secondMatchesInChildNodeOfFirst]
-
-  let nodesMatchAtMetaNodeRoot (children1 : List (Tree α)) (children2 : List (Tree α)) : 
+  def nodesMatchAtMetaNodeRoot (children1 : List (Tree α)) (children2 : List (Tree α)) : 
     ComputationM α (Option (Similarity α)) := do
     let calculation ← computeWithCache (metanode children1) (metanode children2)
     match calculation + 2 with 
     | none => pure none 
     | some v => pure <| some v 
 
-  let similarityOfNodesWithDifferentLabels (label1 : α) (children1 : List (Tree α)) 
-                                           (label2 : α) (children2 : List (Tree α)) : 
-                                           ComputationM α (Option (Similarity α)) := do
-    let case1 ← nodesMatchAtMetaNodeRoot children1 children2
-    let case2 ← nodesDontMatch label1 children1 label2 children2
-    saveAndReturnMinimalDistanceSimilarity [case1, case2]
-
-  let similarityOfNodesWithIdenticalLabels (label : α) (children1 : List (Tree α)) (children2 : List (Tree α)) : 
-    ComputationM α (Option (Similarity α)) := do
-    let case1a ← nodesMatchAtOrdinaryNodeRoot label children1 children2
-    let case1b ← nodesMatchAtMetaNodeRoot children1 children2
-    let case2 ← nodesDontMatch label children1 label children2
-    saveAndReturnMinimalDistanceSimilarity [case1a, case1b, case2]
-
-  let metaNodesMatchAtRoot (annotations1 : List (Tree α)) (annotations2 : List (Tree α)) : 
+  def metaNodesMatchAtRoot (annotations1 : List (Tree α)) (annotations2 : List (Tree α)) : 
     ComputationM α (Option (Similarity α)) := do
     let (shorter, longer) := shorterAndLonger annotations1 annotations2
     let m := longer.length 
@@ -185,10 +157,50 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
       let generalizer := metanode resultingChildren 
       pure <| some ⟨generalizer, distance⟩ 
 
+end 
+
+partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : Tree α) : 
+  ComputationM α (Option (Similarity α)) := do
+
+  let saveAndReturnIfValid (c : Similarity α) : ComputationM α (Option (Similarity α)) := 
+    saveUnderKeyAndReturnIfValid (tree1, tree2) c
+
+  let saveAndReturnMinimalDistanceSimilarity 
+    (xs : List (Option (Similarity α))) : ComputationM α (Option (Similarity α)) := 
+    match minimalDistanceSimilarity? xs with 
+    | none => pure none
+    | some minimalDistanceSimilarity => saveAndReturnIfValid minimalDistanceSimilarity 
+
+  let returnMinimalDistanceSimilarity 
+    (xs : List (Option (Similarity α))) : ComputationM α (Option (Similarity α)) := 
+    match minimalDistanceSimilarity? xs with 
+    | none => pure none
+    | some minimalDistanceSimilarity => pure minimalDistanceSimilarity 
+
+  let nodesDontMatch (label1 : α) (children1 : List (Tree α)) 
+                     (label2 : α) (children2 : List (Tree α)) : ComputationM α (Option (Similarity α)) := do
+    let firstMatchesInChildNodeOfSecond := (← matchBelowOneOf computeWithCache (node label1 children1) children2) + 1
+    let secondMatchesInChildNodeOfFirst := (← matchBelowOneOf computeWithCache (node label2 children2) children1) + 1
+    returnMinimalDistanceSimilarity [firstMatchesInChildNodeOfSecond, secondMatchesInChildNodeOfFirst]
+
+  let similarityOfNodesWithDifferentLabels (label1 : α) (children1 : List (Tree α)) 
+                                           (label2 : α) (children2 : List (Tree α)) : 
+                                           ComputationM α (Option (Similarity α)) := do
+    let case1 ← nodesMatchAtMetaNodeRoot computeWithCache children1 children2
+    let case2 ← nodesDontMatch label1 children1 label2 children2
+    saveAndReturnMinimalDistanceSimilarity [case1, case2]
+
+  let similarityOfNodesWithIdenticalLabels (label : α) (children1 : List (Tree α)) (children2 : List (Tree α)) : 
+    ComputationM α (Option (Similarity α)) := do
+    let case1a ← nodesMatchAtOrdinaryNodeRoot computeWithCache label children1 children2
+    let case1b ← nodesMatchAtMetaNodeRoot computeWithCache children1 children2
+    let case2 ← nodesDontMatch label children1 label children2
+    saveAndReturnMinimalDistanceSimilarity [case1a, case1b, case2]
+
   let metaNodesDontMatch (annotations1 : List (Tree α)) (annotations2 : List (Tree α)) : 
     ComputationM α (Option (Similarity α)) := do
-    let firstMatchesInAnnotationOfSecond ← matchBelowOneOf (metanode annotations1) annotations2
-    let secondMatchesInAnnotationOfFirst ← matchBelowOneOf (metanode annotations2) annotations1
+    let firstMatchesInAnnotationOfSecond ← matchBelowOneOf computeWithCache (metanode annotations1) annotations2
+    let secondMatchesInAnnotationOfFirst ← matchBelowOneOf computeWithCache (metanode annotations2) annotations1
     returnMinimalDistanceSimilarity [firstMatchesInAnnotationOfSecond, secondMatchesInAnnotationOfFirst]
 
   let calculateSimilarity : Tree α → Tree α → ComputationM α (Option (Similarity α)) 
@@ -211,26 +223,32 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
         similarityOfNodesWithDifferentLabels v xs w ys
 
     | metanode xs, metanode ys => do 
-      let case1 ← metaNodesMatchAtRoot xs ys
+      let case1 ← metaNodesMatchAtRoot computeWithCache xs ys
       let case2 ← metaNodesDontMatch xs ys
       saveAndReturnMinimalDistanceSimilarity [case1, case2]
 
     | node v xs, metanode ys 
     | metanode ys, node v xs => do 
       let matchAtRoot := (← computeWithCache (metanode xs) (metanode ys)) + 1
-      let onlyNodeMappedToRoot := (← matchBelowOneOf (metanode ys) xs) + 1
-      let onlyMetanodeMappedToRoot ← matchBelowOneOf (node v xs) ys
+      let onlyNodeMappedToRoot := (← matchBelowOneOf computeWithCache (metanode ys) xs) + 1
+      let onlyMetanodeMappedToRoot ← matchBelowOneOf computeWithCache (node v xs) ys
       saveAndReturnMinimalDistanceSimilarity [matchAtRoot, onlyNodeMappedToRoot, 
                                               onlyMetanodeMappedToRoot]
 
-  let getFromCache trees := @getFromCache _ (Similarity α) _ trees
+  let getFromCache trees := @getFromCache (Tree α × Tree α) (Similarity α) _ _ trees
 
   match ← getFromCache (tree1, tree2) with
   | some v => pure v
   | none => let result := calculateSimilarity tree1 tree2
-            match ← result with 
-            | none => result
-            | some v => dbg_trace s!"{tree1} <> {tree2} >> {v}"; result
+            
+            -- let message := match ← result with 
+            --   | none => ""
+            --   | some v => s!"{tree1} <> {tree2} >> {v}"
+            -- dbg_trace message
+            
+            result
+-- end of computation function definition 
+
 
 instance : ToString (WithTop ℕ) where 
   toString s := match s with 
@@ -243,9 +261,9 @@ def computeAux [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α)
   dbg_trace s!"ComputeAux for n = {configuration.maximumDistance}";
   ReaderT.run (computeWithCache t1 t2) configuration cache 
 
-def compute' [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) (configuration : Configuration) : 
+def compute' [BEq α] [Hashable α] [ToString α] (t1 : Tree α) (t2 : Tree α) (configuration : Configuration) : 
   Option (Similarity α) × SimilarityCache α := 
-  let initialState := emptyCache
+  let initialState := @emptyCache (Tree α × Tree α) _
   ReaderT.run (computeWithCache t1 t2) configuration initialState 
   
 def computeTest [ToString α] [BEq α] : Tree α → Tree α → Option (Similarity α) := 
@@ -259,12 +277,12 @@ def computeUpTo [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) (collapseMe
          computeAux t1 t2 initialConfiguration emptyCache 
   | n + 1 => match computeUpTo t1 t2 collapseMetaNodes n with 
              | (some c, cache) => (c, cache)
-             | (none, cache) => let configuration := ⟨collapseMetaNodes, some (n+1)⟩ 
+             | (none, cache) => let configuration := ⟨collapseMetaNodes, some (n + 1)⟩ 
                                 computeAux t1 t2 configuration cache
 
 def compute [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) : Option $ Similarity α := 
-  -- compute' t1 t2 default |>.fst
-  computeUpTo t1 t2 true 100 |>.fst
+  compute' t1 t2 default |>.fst
+  -- computeUpTo t1 t2 true 10 |>.fst
 
 
 def tree1 : Tree String := node "+" [leaf "a", leaf "b"]
@@ -284,12 +302,22 @@ def TEST4 := compute tree1 (.metanode [.leaf "a"]) == some ⟨metanode [leaf "a"
 def tree5 : Tree String := node "+" [node "+" [leaf "c", leaf "b"], tree1]
 def tree6 : Tree String := node "+" [tree1, node "+" [node "+" [leaf "d", leaf "c"], tree1]]
 def tree7 : Tree String := node "+" [node "+" [metanode [], leaf "b"], metanode [tree1]]
-def TEST5 := compute tree5 tree6 == some ⟨tree7, 7⟩  
+def TEST5 := compute tree5 tree6 == some ⟨tree7, 7⟩ 
 
-def TESTS := TEST0 && TEST1 && TEST2 && TEST3 && TEST4 && TEST5
+def TESTS := TEST0 && TEST1 && TEST2 && TEST3 && TEST4 
 
 #eval TESTS
-#eval computeUpTo tree1 tree3 true 3 |>.fst
-#eval computeAux tree1 tree3 ⟨true, some 2⟩ default  
+#eval TEST5
 
-#eval (tree1, tree3) 
+def iterate (t : Tree String) : Nat → Tree String 
+  | 0 => t
+  | n + 1 => iterate (node "^2" [t]) n
+
+#eval compute (iterate tree1 10) (iterate tree1 9)
+
+
+def nest (t : Tree String) : Nat → Tree String 
+  | 0 => t
+  | n + 1 => iterate (node "+" [t, t]) n
+
+#eval compute (nest tree1 10) (nest tree1 10)

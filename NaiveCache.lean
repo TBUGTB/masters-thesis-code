@@ -22,7 +22,7 @@ def getFromCache [BEq α] (key : α) : StateM (Cache α β) (Option β) := do
   else 
     pure none
 
-def saveToCache [BEq α] (key : α) (val : β) : StateM (Cache α β) PUnit := do 
+def saveToCache {α : Type} [BEq α] (key : α) (val : β) : StateM (Cache α β) PUnit := do 
   let currentCache := (← get).cache
   let newCache := (key, some val) :: currentCache 
   modify (fun s => {s with cache := newCache})   
