@@ -1,5 +1,5 @@
 import Lean
-import ReferenceImplementation
+import SyntacticSimilarity
 import Aesop 
 
 open Lean HoleTree Lean.Meta
@@ -7,34 +7,34 @@ open Lean HoleTree Lean.Meta
 def marker (s : String) : Expr := .mdata (MData.empty.insert "marker" s) default 
 
 def unfoldArguments : Expr → Expr × List Expr
-  | Expr.app f x => let (func, args) := unfoldArguments f
-                    (func, args ++ [x]) 
+  | Expr.app f x => let (function, arguments) := unfoldArguments f
+                    (function, arguments ++ [x]) 
   | e => (e, [])
 
 partial def Lean.Expr.toTree : Expr → MetaM (Tree Expr)  
   | Expr.const declName us => pure <| Tree.leaf (.const declName us)
-  | Expr.bvar n => dbg_trace "Detected bvar"; pure <| Tree.leaf  (.bvar n)
   | Expr.fvar fvarId =>  pure <| Tree.leaf (.fvar fvarId)
   | Expr.mvar mvarId =>  pure <| Tree.leaf (.mvar mvarId)
   | Expr.lit x =>  pure <| Tree.leaf (Expr.lit x)
   | Expr.sort u =>  pure <| Tree.leaf (Expr.sort u)
   | Expr.app f x => do 
-                    let (func, args) := unfoldArguments (Expr.app f x)
-                    let argTrees ← args.mapM Expr.toTree 
-                    pure <| .node (func) argTrees 
+                    let (function, arguments) := unfoldArguments (Expr.app f x)
+                    let argumentsAsTrees ← arguments.mapM Expr.toTree 
+                    pure <| Tree.node (function) argumentsAsTrees 
   | Expr.forallE binderName binderType b binderInfo => do 
       let (mvars, _, body) ← forallMetaTelescopeReducing <| Expr.forallE binderName binderType b binderInfo
-      let bodyTree ← body.toTree
+      let bodyAsTree ← body.toTree
       let mvarList := mvars.toList 
       let mvarTypes ← mvarList.mapM inferType
-      let mvarTypeTrees ← mvarTypes.mapM Expr.toTree
-      pure <| Tree.node (marker "forall") (mvarTypeTrees ++ [bodyTree])
+      let mvarTypesAsTrees ← mvarTypes.mapM Expr.toTree
+      pure <| Tree.node (marker "forall") (mvarTypesAsTrees ++ [bodyAsTree])
   | Expr.lam binderName binderType b binderInfo => do 
       let (_, _, body) ← lambdaMetaTelescope <| Expr.lam binderName binderType b binderInfo
       let bodyTree ← body.toTree
-      pure <| .node (marker "lambda") [bodyTree] 
+      pure <| Tree.node (marker "lambda") [bodyTree] 
+  | Expr.bvar _ => panic! "Unbound bvar in expression"
   | Expr.mdata _ e => e.toTree
-  | x => dbg_trace "Unforeseen expression case (let or proj) cannot be further transformed into a tree"; 
+  | x => dbg_trace "Unsupported Lean.Expr constructure (let or proj) cannot be further transformed into a tree"; 
         pure <| .leaf x
 
 def createExprTreeFromLemmaName (name : Lean.Name) : Lean.Elab.Tactic.TacticM (Tree Expr) := do 

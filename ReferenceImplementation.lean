@@ -109,7 +109,7 @@ partial def compute [ToString α] [BEq α] (tree1 : Tree α) (tree2 : Tree α) :
     let secondMatchesInAnnotationOfFirst := matchBelowOneOf (metanode annotations2) annotations1
     minimalDistanceSimilarity [firstMatchesInAnnotationOfSecond, secondMatchesInAnnotationOfFirst]
 
-  let result := match tree1, tree2 with
+  match tree1, tree2 with
   | node v [], node w [] => if v==w then 
                               ⟨node v [], 0⟩ 
                             else 
@@ -133,8 +133,5 @@ partial def compute [ToString α] [BEq α] (tree1 : Tree α) (tree2 : Tree α) :
   | metanode ys, node v xs => let matchAtRoot := compute (metanode xs) (metanode ys) + 1
                               let onlyNodeMappedToRoot := matchBelowOneOf (metanode ys) xs + 1
                               let onlyMetanodeMappedToRoot := matchBelowOneOf (node v xs) ys
-                              minimalDistanceSimilarity [matchAtRoot, onlyNodeMappedToRoot, onlyMetanodeMappedToRoot]
-
-  -- dbg_trace "{tree1} | {tree2} => {result}"
-
-  result
+                              minimalDistanceSimilarity [matchAtRoot, onlyNodeMappedToRoot, 
+                                                         onlyMetanodeMappedToRoot]
