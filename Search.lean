@@ -1,8 +1,7 @@
 import Lean
 import SyntacticSimilarity
-import Aesop 
 
-open Lean HoleTree Lean.Meta
+open Lean HoleTree Lean.Meta Lean.Elab.Tactic
 
 def marker (s : String) : Expr := .mdata (MData.empty.insert "marker" s) default 
 
@@ -11,60 +10,42 @@ def unfoldArguments : Expr → Expr × List Expr
                     (function, arguments ++ [x]) 
   | e => (e, [])
 
-partial def Lean.Expr.toTree : Expr → MetaM (Tree Expr)  
+partial def Lean.Expr.toHoleTree : Expr → MetaM (Tree Expr)  
   | Expr.const declName us => pure <| Tree.leaf (.const declName us)
   | Expr.fvar fvarId =>  pure <| Tree.leaf (.fvar fvarId)
   | Expr.mvar mvarId =>  pure <| Tree.leaf (.mvar mvarId)
   | Expr.lit x =>  pure <| Tree.leaf (Expr.lit x)
   | Expr.sort u =>  pure <| Tree.leaf (Expr.sort u)
   | Expr.app f x => do 
-                    let (function, arguments) := unfoldArguments (Expr.app f x)
-                    let argumentsAsTrees ← arguments.mapM Expr.toTree 
-                    pure <| Tree.node (function) argumentsAsTrees 
+                    pure <| Tree.node (marker "app") [← f.toHoleTree, ← x.toHoleTree]
+                    -- let (function, arguments) := unfoldArguments (Expr.app f x)
+                    -- let argumentsAsTrees ← arguments.mapM Expr.toHoleTree 
+                    -- pure <| Tree.node (function) argumentsAsTrees 
   | Expr.forallE binderName binderType b binderInfo => do 
       let (mvars, _, body) ← forallMetaTelescopeReducing <| Expr.forallE binderName binderType b binderInfo
-      let bodyAsTree ← body.toTree
-      let mvarList := mvars.toList 
+      let bodyAsTree ← body.toHoleTree
+      let mvarList := mvars.toList  
       let mvarTypes ← mvarList.mapM inferType
-      let mvarTypesAsTrees ← mvarTypes.mapM Expr.toTree
+      let mvarTypesAsTrees ← mvarTypes.mapM Expr.toHoleTree
       pure <| Tree.node (marker "forall") (mvarTypesAsTrees ++ [bodyAsTree])
   | Expr.lam binderName binderType b binderInfo => do 
       let (_, _, body) ← lambdaMetaTelescope <| Expr.lam binderName binderType b binderInfo
-      let bodyTree ← body.toTree
+      let bodyTree ← body.toHoleTree
       pure <| Tree.node (marker "lambda") [bodyTree] 
   | Expr.bvar _ => panic! "Unbound bvar in expression"
-  | Expr.mdata _ e => e.toTree
-  | x => dbg_trace "Unsupported Lean.Expr constructure (let or proj) cannot be further transformed into a tree"; 
+  | Expr.mdata _ e => e.toHoleTree
+  | x => dbg_trace "Unsupported Lean.Expr constructor (let or proj) cannot be further transformed into a tree"; 
         pure <| .leaf x
 
-def createExprTreeFromLemmaName (name : Lean.Name) : Lean.Elab.Tactic.TacticM (Tree Expr) := do 
-  let lem ← mkConstWithFreshMVarLevels name
-  let typ ← Lean.Meta.inferType lem
-  let reduced ← withTransparency .instances $ reduceAll typ
-  pure (← reduced.toTree)
+def createHoleTreeFromLemmaName (name : Lean.Name) : MetaM (Tree Expr) := do 
+  let lemmaAsConstant ← mkConstWithFreshMVarLevels name
+  let lemmaExpr ← Lean.Meta.inferType lemmaAsConstant
+  let reduced ← withTransparency .instances $ reduceAll lemmaExpr
+  pure (← reduced.toHoleTree)
 
-def nextLibraryMatch (currentDistance : Option Nat) (distance : Nat) (currentName : Name) (name : Name) : 
-                     (Option Nat) × Name :=
-  match currentDistance with 
-  | none => (distance, name)
-  | some d => if d < distance then (currentDistance, currentName) else (distance, name) 
-
-open Lean.Elab.Tactic in 
-def bestSyntacticLibraryMatch (e : Expr) (libraryLemmas : List Name) : TacticM Name := do
-  let tree ← e.toTree
-  dbg_trace s!"Goal: {tree}"
-  let mut currentMinimizer : Name := ``Nat
-  let mut currentDistance : Option Nat := none
-  for lem in libraryLemmas do 
-    let lemTree ← createExprTreeFromLemmaName lem
-    let computation := SyntacticSimilarity.compute tree lemTree
-    -- dbg_trace f!"{computation.distance} {tree.numberOfNodes} {lemTree.numberOfNodes} {tree} \n {lemTree}"
-    match computation with 
-    | some computation => 
-      dbg_trace s!"{lem}: {computation.distance}"
-      dbg_trace s!"  {lemTree}"
-      dbg_trace s!"  {computation.generalizer}"
-      (currentDistance, currentMinimizer) := 
-        nextLibraryMatch currentDistance computation.distance currentMinimizer lem    
-    | none => pure ()  
-  pure currentMinimizer
+def bestSyntacticLibraryMatch (e : Expr) (libraryLemmas : List Name) : MetaM Name := do
+  let goalAsHoleTree ← e.toHoleTree
+  let lemmasAsHoleTrees ← libraryLemmas.mapM createHoleTreeFromLemmaName
+  let indexOfBestMatch := SyntacticSimilarity.indexOfMinimalDistanceTree goalAsHoleTree lemmasAsHoleTrees
+  let bestMatch := libraryLemmas[indexOfBestMatch]!
+  pure bestMatch

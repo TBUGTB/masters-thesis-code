@@ -290,9 +290,15 @@ def computeUpTo [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) (collapseMe
              | (none, cache) => let configuration := ⟨collapseMetaNodes, some (n + 1)⟩ 
                                 computeAux t1 t2 configuration cache
 
-def compute [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) : Option $ Similarity α := 
+def compute [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) : Option (Similarity α) := 
   compute' t1 t2 default |>.fst
   -- computeUpTo t1 t2 true 10 |>.fst
+
+def indexOfMinimalDistanceTree [BEq α] [ToString α] (tree1 : Tree α) (ts : List (Tree α)) : Nat := 
+  let pairwiseSimilarities := ts.map (compute tree1) 
+  match minimalDistanceSimilarityAndIdx? pairwiseSimilarities with 
+  | none => unreachable!
+  | some (_, idx) => idx  
 
 
 def tree1 : Tree String := node "+" [leaf "a", leaf "b"]
@@ -318,6 +324,10 @@ def TESTS := TEST0 && TEST1 && TEST2 && TEST3 && TEST4
 
 #eval TESTS
 #eval TEST5 
+
+#eval compute (node "f" [node "*" [leaf "a", leaf "b"], 
+                         node "*" [leaf "c", leaf "d"]]) 
+              (node "*" [leaf "a", leaf "d"])
 
 def iterate (t : Tree String) : Nat → Tree String 
   | 0 => t
