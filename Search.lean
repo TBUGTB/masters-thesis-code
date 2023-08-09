@@ -1,5 +1,6 @@
 import Lean
 import SyntacticSimilarity
+import Aesop
 
 open Lean HoleTree Lean.Meta Lean.Elab.Tactic
 
@@ -17,10 +18,10 @@ partial def Lean.Expr.toHoleTree : Expr → MetaM (Tree Expr)
   | Expr.lit x =>  pure <| Tree.leaf (Expr.lit x)
   | Expr.sort u =>  pure <| Tree.leaf (Expr.sort u)
   | Expr.app f x => do 
-                    pure <| Tree.node (marker "app") [← f.toHoleTree, ← x.toHoleTree]
-                    -- let (function, arguments) := unfoldArguments (Expr.app f x)
-                    -- let argumentsAsTrees ← arguments.mapM Expr.toHoleTree 
-                    -- pure <| Tree.node (function) argumentsAsTrees 
+      let (function, arguments) := unfoldArguments (Expr.app f x)
+      let functionAsTree ← function.toHoleTree
+      let argumentsAsTrees ← arguments.mapM Expr.toHoleTree 
+      pure <| Tree.node (marker "app") (functionAsTree :: argumentsAsTrees) 
   | Expr.forallE binderName binderType b binderInfo => do 
       let (mvars, _, body) ← forallMetaTelescopeReducing <| Expr.forallE binderName binderType b binderInfo
       let bodyAsTree ← body.toHoleTree
@@ -34,18 +35,50 @@ partial def Lean.Expr.toHoleTree : Expr → MetaM (Tree Expr)
       pure <| Tree.node (marker "lambda") [bodyTree] 
   | Expr.bvar _ => panic! "Unbound bvar in expression"
   | Expr.mdata _ e => e.toHoleTree
-  | x => dbg_trace "Unsupported Lean.Expr constructor (let or proj) cannot be further transformed into a tree"; 
-        pure <| .leaf x
+  | Expr.letE _ (type : Expr) (value : Expr) (body : Expr) _ => do
+      pure <| Tree.node (marker "let") [← type.toHoleTree, ← value.toHoleTree, ← body.toHoleTree]
+  | Expr.proj _ (idx : Nat) (struct : Expr) => do 
+      pure <| Tree.node (marker s!"proj {idx}") [← struct.toHoleTree]
 
-def createHoleTreeFromLemmaName (name : Lean.Name) : MetaM (Tree Expr) := do 
-  let lemmaAsConstant ← mkConstWithFreshMVarLevels name
-  let lemmaExpr ← Lean.Meta.inferType lemmaAsConstant
-  let reduced ← withTransparency .instances $ reduceAll lemmaExpr
+def createHoleTreeFromLemmaExpr (l : Lean.Expr) : MetaM (Tree Expr) := do 
+  let lemmaType ← Lean.Meta.inferType l
+  let reduced ← withTransparency .instances $ reduceAll lemmaType
   pure (← reduced.toHoleTree)
 
-def bestSyntacticLibraryMatch (e : Expr) (libraryLemmas : List Name) : MetaM Name := do
+def idxOfBestSyntacticLibraryMatch (e : Expr) (libraryLemmas : Array Expr) : MetaM Nat := do
   let goalAsHoleTree ← e.toHoleTree
-  let lemmasAsHoleTrees ← libraryLemmas.mapM createHoleTreeFromLemmaName
-  let indexOfBestMatch := SyntacticSimilarity.indexOfMinimalDistanceTree goalAsHoleTree lemmasAsHoleTrees
-  let bestMatch := libraryLemmas[indexOfBestMatch]!
-  pure bestMatch
+  let lemmasAsHoleTrees ← libraryLemmas.mapM createHoleTreeFromLemmaExpr
+  let lemmasAsHoleTreesList := lemmasAsHoleTrees.toList
+  dbg_trace goalAsHoleTree
+  dbg_trace lemmasAsHoleTreesList
+  let indexOfBestMatch := SyntacticSimilarity.indexOfMinimalDistanceTree goalAsHoleTree lemmasAsHoleTreesList
+  pure indexOfBestMatch
+
+open Lean Elab 
+
+def evalAesopWithLemmaAsUnsafeRule (lemmaName : Name) : TacticM Unit := do
+  dbg_trace lemmaName
+  let identifier := mkIdent lemmaName
+  Tactic.evalTactic (← `(tactic| aesop (add unsafe $identifier:ident)))
+
+elab "aesop_with_search" "[" lemmas:term,* "]" : tactic => 
+  Tactic.withMainContext do
+  let goal ← Lean.Elab.Tactic.getMainGoal
+  let type ← goal.getType
+  let reduced ← withTransparency .instances $ reduceAll type
+
+  let lemmasAsExpr ← lemmas.getElems.mapM (fun x => elabTerm x none)
+
+  let idxOfBestMatch ← idxOfBestSyntacticLibraryMatch reduced lemmasAsExpr
+  let bestMatch := lemmasAsExpr[idxOfBestMatch]!
+
+  dbg_trace bestMatch
+
+  match bestMatch with 
+  | .const name _ => evalAesopWithLemmaAsUnsafeRule name
+  | .app f arg => let (function, _) := unfoldArguments (.app f arg)
+                  dbg_trace function
+                  match function with 
+                  | .const name _ => evalAesopWithLemmaAsUnsafeRule name
+                  | _ => pure ()
+  | _ => pure () 
