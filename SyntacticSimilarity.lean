@@ -113,7 +113,7 @@ variable [ToString α]
       | none => pure none 
       | some (minimizer, minimizerIdx) =>
           let generalizer := metanode $ [minimizer.generalizer]
-          let distance := minimizer.distance + numberOfNodes (xs.eraseIdx minimizerIdx) + 1
+          let distance := minimizer.distance + numberOfNodes (xs.eraseIdx minimizerIdx)
           pure <| some ⟨generalizer, distance⟩
 
   def nodesMatchAtOrdinaryNodeRoot (label : α) (children1 : List (Tree α)) (children2 : List (Tree α)) 
@@ -128,8 +128,9 @@ variable [ToString α]
 
   def nodesMatchAtMetaNodeRoot (children1 : List (Tree α)) (children2 : List (Tree α)) : 
     ComputationM α (Option (Similarity α)) := do
-    let calculation ← computeWithCache (metanode children1) (metanode children2)
-    match calculation + 2 with 
+    let calculation ← withAddToDistanceAfterCalculation 2 do 
+      computeWithCache (metanode children1) (metanode children2)
+    match calculation with 
     | none => pure none 
     | some v => pure <| some v 
 
@@ -179,8 +180,10 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
 
   let nodesDontMatch (label1 : α) (children1 : List (Tree α)) 
                      (label2 : α) (children2 : List (Tree α)) : ComputationM α (Option (Similarity α)) := do
-    let firstMatchesInChildNodeOfSecond := (← matchBelowOneOf computeWithCache (node label1 children1) children2) + 1
-    let secondMatchesInChildNodeOfFirst := (← matchBelowOneOf computeWithCache (node label2 children2) children1) + 1
+    let firstMatchesInChildNodeOfSecond ← withAddToDistanceAfterCalculation 2 do
+      matchBelowOneOf computeWithCache (node label1 children1) children2
+    let secondMatchesInChildNodeOfFirst ← withAddToDistanceAfterCalculation 2 do 
+      matchBelowOneOf computeWithCache (node label2 children2) children1
     returnMinimalDistanceSimilarity [firstMatchesInChildNodeOfSecond, secondMatchesInChildNodeOfFirst]
 
   let similarityOfNodesWithDifferentLabels (label1 : α) (children1 : List (Tree α)) 
@@ -222,6 +225,10 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
       else 
         similarityOfNodesWithDifferentLabels v xs w ys
 
+    -- additional case for optimization
+    | metanode xs, metanode [y] 
+    | metanode [y], metanode xs => matchBelowOneOf computeWithCache y xs
+      
     | metanode xs, metanode ys => do 
       let case1 ← metaNodesMatchAtRoot computeWithCache xs ys
       let case2 ← metaNodesDontMatch xs ys
@@ -229,9 +236,12 @@ partial def computeWithCache [BEq α] [ToString α] (tree1 : Tree α) (tree2 : T
 
     | node v xs, metanode ys 
     | metanode ys, node v xs => do 
-      let matchAtRoot := (← computeWithCache (metanode xs) (metanode ys)) + 1
-      let onlyNodeMappedToRoot := (← matchBelowOneOf computeWithCache (metanode ys) xs) + 1
-      let onlyMetanodeMappedToRoot ← matchBelowOneOf computeWithCache (node v xs) ys
+      let matchAtRoot ← withAddToDistanceAfterCalculation 1 do  
+                           computeWithCache (metanode xs) (metanode ys)
+      let onlyNodeMappedToRoot ← withAddToDistanceAfterCalculation 1 do 
+                                  matchBelowOneOf computeWithCache (metanode ys) xs
+      let onlyMetanodeMappedToRoot ← withAddToDistanceAfterCalculation 1 do 
+                                  matchBelowOneOf computeWithCache (node v xs) ys
       saveAndReturnMinimalDistanceSimilarity [matchAtRoot, onlyNodeMappedToRoot, 
                                               onlyMetanodeMappedToRoot]
 
@@ -280,9 +290,16 @@ def computeUpTo [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) (collapseMe
              | (none, cache) => let configuration := ⟨collapseMetaNodes, some (n + 1)⟩ 
                                 computeAux t1 t2 configuration cache
 
-def compute [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) : Option $ Similarity α := 
+def compute [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) : Option (Similarity α) := 
   compute' t1 t2 default |>.fst
   -- computeUpTo t1 t2 true 10 |>.fst
+
+def indexOfMinimalDistanceTree [BEq α] [ToString α] (tree1 : Tree α) (ts : List (Tree α)) : Nat := 
+  let pairwiseSimilarities := ts.map (compute tree1) 
+  dbg_trace pairwiseSimilarities
+  match minimalDistanceSimilarityAndIdx? pairwiseSimilarities with 
+  | none => unreachable!
+  | some (_, idx) => idx  
 
 
 def tree1 : Tree String := node "+" [leaf "a", leaf "b"]
@@ -307,13 +324,17 @@ def TEST5 := compute tree5 tree6 == some ⟨tree7, 7⟩
 def TESTS := TEST0 && TEST1 && TEST2 && TEST3 && TEST4 
 
 #eval TESTS
-#eval TEST5
+#eval TEST5 
+
+#eval compute (node "f" [node "*" [leaf "a", leaf "b"], 
+                         node "*" [leaf "c", leaf "d"]]) 
+              (node "*" [leaf "a", leaf "d"])
 
 def iterate (t : Tree String) : Nat → Tree String 
   | 0 => t
   | n + 1 => iterate (node "^2" [t]) n
 
-#eval compute (iterate tree1 10) (iterate tree1 9)
+#eval compute (iterate tree1 4) (iterate tree1 5)
 
 
 def nest (t : Tree String) : Nat → Tree String 

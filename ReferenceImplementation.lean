@@ -46,7 +46,7 @@ def minimalDistanceSimilarityAndIdx : List (Similarity α) → Similarity α × 
 def minimalDistanceSimilarity (xs : List (Similarity α)) : Similarity α := 
   minimalDistanceSimilarityAndIdx xs |>.fst
 
-partial def compute [ToString α] [BEq α] (tree1 : Tree α) (tree2 : Tree α) : Similarity α := 
+partial def compute [BEq α] (tree1 : Tree α) (tree2 : Tree α) : Similarity α := 
   
   let matchBelowOneOf (t : Tree α) (xs : List (Tree α)) : Similarity α := 
     if xs == [] then 
@@ -135,3 +135,8 @@ partial def compute [ToString α] [BEq α] (tree1 : Tree α) (tree2 : Tree α) :
                               let onlyMetanodeMappedToRoot := matchBelowOneOf (node v xs) ys
                               minimalDistanceSimilarity [matchAtRoot, onlyNodeMappedToRoot, 
                                                          onlyMetanodeMappedToRoot]
+
+def indexOfMinimalDistanceTree [BEq α] (tree1 : Tree α) (ts : List (Tree α)) : Nat := 
+  let similarities := ts.map (fun tree2 => compute tree1 tree2) 
+  let (_, idx) := minimalDistanceSimilarityAndIdx similarities
+  idx
