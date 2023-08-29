@@ -296,7 +296,6 @@ def compute [BEq α] [ToString α] (t1 : Tree α) (t2 : Tree α) : Option (Simil
 
 def indexOfMinimalDistanceTree [BEq α] [ToString α] (tree1 : Tree α) (ts : List (Tree α)) : Nat := 
   let pairwiseSimilarities := ts.map (compute tree1) 
-  dbg_trace pairwiseSimilarities
   match minimalDistanceSimilarityAndIdx? pairwiseSimilarities with 
   | none => unreachable!
   | some (_, idx) => idx  

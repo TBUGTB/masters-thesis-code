@@ -49,8 +49,6 @@ def idxOfBestSyntacticLibraryMatch (e : Expr) (libraryLemmas : Array Expr) : Met
   let goalAsHoleTree ← e.toHoleTree
   let lemmasAsHoleTrees ← libraryLemmas.mapM createHoleTreeFromLemmaExpr
   let lemmasAsHoleTreesList := lemmasAsHoleTrees.toList
-  dbg_trace goalAsHoleTree
-  dbg_trace lemmasAsHoleTreesList
   let indexOfBestMatch := SyntacticSimilarity.indexOfMinimalDistanceTree goalAsHoleTree lemmasAsHoleTreesList
   pure indexOfBestMatch
 
@@ -71,8 +69,6 @@ elab "aesop_with_search" "[" lemmas:term,* "]" : tactic =>
 
   let idxOfBestMatch ← idxOfBestSyntacticLibraryMatch reduced lemmasAsExpr
   let bestMatch := lemmasAsExpr[idxOfBestMatch]!
-
-  dbg_trace bestMatch
 
   match bestMatch with 
   | .const name _ => evalAesopWithLemmaAsUnsafeRule name
