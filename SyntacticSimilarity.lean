@@ -1,6 +1,6 @@
-import IncompleteMatchings
+import Utility.IncompleteMatchings
 import HoleTree 
-import HashMapCache
+import Utility.HashMapCache
 import Mathlib.Order.WithBot
 
 open HoleTree Tree
@@ -299,45 +299,3 @@ def indexOfMinimalDistanceTree [BEq α] [ToString α] (tree1 : Tree α) (ts : Li
   match minimalDistanceSimilarityAndIdx? pairwiseSimilarities with 
   | none => unreachable!
   | some (_, idx) => idx  
-
-
-def tree1 : Tree String := node "+" [leaf "a", leaf "b"]
-def TEST0 := compute tree1 tree1 == some ⟨tree1, 0⟩ 
-
-def tree2 : Tree String := node "+" [leaf "a", leaf "c"]
-def TEST1 := compute tree1 tree2 == some ⟨node "+" [leaf "a", metanode []], 2⟩ 
-
-def tree3 : Tree String := (node "+" [leaf "d", tree1]) 
-def TEST2 := compute tree1 tree3 == some ⟨metanode [node "+" [leaf "a", leaf "b"]], 3⟩ 
-
-def tree4 : Tree String := (node "+" [tree1, node "+" [leaf "c", leaf "b"]])
-def TEST3 := compute tree1 tree4 == some ⟨metanode [node "+" [leaf "a", leaf "b"]], 5⟩ 
-
-def TEST4 := compute tree1 (.metanode [.leaf "a"]) == some ⟨metanode [leaf "a"], 2⟩ 
-
-def tree5 : Tree String := node "+" [node "+" [leaf "c", leaf "b"], tree1]
-def tree6 : Tree String := node "+" [tree1, node "+" [node "+" [leaf "d", leaf "c"], tree1]]
-def tree7 : Tree String := node "+" [node "+" [metanode [], leaf "b"], metanode [tree1]]
-def TEST5 := compute tree5 tree6 == some ⟨tree7, 7⟩ 
-
-def TESTS := TEST0 && TEST1 && TEST2 && TEST3 && TEST4 
-
-#eval TESTS
-#eval TEST5 
-
-#eval compute (node "f" [node "*" [leaf "a", leaf "b"], 
-                         node "*" [leaf "c", leaf "d"]]) 
-              (node "*" [leaf "a", leaf "d"])
-
-def iterate (t : Tree String) : Nat → Tree String 
-  | 0 => t
-  | n + 1 => iterate (node "^2" [t]) n
-
-#eval compute (iterate tree1 4) (iterate tree1 5)
-
-
-def nest (t : Tree String) : Nat → Tree String 
-  | 0 => t
-  | n + 1 => iterate (node "+" [t, t]) n
-
-#eval compute (nest tree1 10) (nest tree1 10)

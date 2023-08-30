@@ -1,4 +1,4 @@
-import Matchings
+import Utility.Matchings
 import HoleTree
 
 open HoleTree Tree

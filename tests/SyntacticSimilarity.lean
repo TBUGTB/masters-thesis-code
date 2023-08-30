@@ -23,6 +23,4 @@ def TEST5 := compute tree5 tree6 == some ⟨tree7, 7⟩
 
 def TESTS := TEST0 && TEST1 && TEST2 && TEST3 && TEST4 && TEST5
 
-#eval TEST2
-#eval compute tree1 tree3
-#eval (tree1, tree3)
+#eval TESTS
